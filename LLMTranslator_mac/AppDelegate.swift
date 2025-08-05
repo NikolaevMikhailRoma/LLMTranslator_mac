@@ -53,13 +53,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPopover(text: String) {
         os_log("[ClipTranslator] will-show popover")
 
-        // 1) якорь 1×1 px под курсором
+        // 1) Якорь 1×1 px под курсором
         let pt = NSEvent.mouseLocation                       // bottom-left origin
         let frame = NSRect(x: pt.x, y: pt.y, width: 1, height: 1)
 
         if anchorWin == nil {
-            anchorWin = NSWindow(contentRect: frame, styleMask: .borderless,
-                                  backing: .buffered, defer: false)
+            anchorWin = NSWindow(
+                contentRect: frame,
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
             anchorWin?.level = .statusBar
             anchorWin?.isOpaque = false
             anchorWin?.backgroundColor = .clear
@@ -69,16 +73,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             anchorWin?.setFrame(frame, display: false)
         }
 
-        // 2) активируем приложение и выводим якорь
+        // 2) Активируем приложение и выводим якорь
         NSApp.activate(ignoringOtherApps: true)
         anchorWin?.orderFront(nil)
 
-        // 3) показываем поп-овер
-        popover.contentViewController =
-            NSHostingController(rootView: TranslationBubble(text: text))
-        popover.show(relativeTo: anchorWin!.contentView!.bounds,
-                     of:         anchorWin!.contentView!,
-                     preferredEdge: .maxY)
+        // 3) Создаём SwiftUI-контроллер и задаём popover.contentSize
+        let host = NSHostingController(rootView: TranslationBubble(text: text))
+        host.view.layoutSubtreeIfNeeded()                   // вычисляем intrinsic size
+        popover.contentViewController = host
+        popover.contentSize = host.view.fittingSize         // ← ключевая строка
+
+        // 4) Показываем popover
+        popover.show(
+            relativeTo: anchorWin!.contentView!.bounds,
+            of:         anchorWin!.contentView!,
+            preferredEdge: .maxY
+        )
 
         os_log("[ClipTranslator] did-show popover")
     }
@@ -94,6 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.menu = menu
         }
     }
+
     @objc private func quit() { NSApp.terminate(nil) }
 }
-

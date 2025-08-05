@@ -2,14 +2,14 @@ import SwiftUI
 
 struct TranslationBubble: View {
     let text: String
+
     var body: some View {
         Text(text)
             .font(.system(size: 15))
+            .multilineTextAlignment(.leading)          // сохраняем выравнивание
             .padding(12)
-            .background(.regularMaterial)     // полупрозрачная «капля» macOS 12+
+            .background(.regularMaterial)              // «капля» macOS
             .cornerRadius(12)
-            .frame(maxWidth: 320, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize(horizontal: true, vertical: true) // bubble сам рассчитывает ширину/высоту
     }
 }
-
