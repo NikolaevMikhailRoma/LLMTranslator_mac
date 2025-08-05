@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popover   = NSPopover()
     private var anchorWin: NSWindow?
 
-    // Кто был активен до нас
+    // Кто был активным до показа пузыря
     private var previousApp: NSRunningApplication?
 
     // MARK: Clipboard
@@ -20,12 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private var timer: Timer?
 
+    // MARK: App lifecycle
     func applicationDidFinishLaunching(_: Notification) {
         buildStatusItem()
 
         popover.behavior = .transient
         popover.animates = true
-        popover.delegate = self                                   // ← делегат
+        popover.delegate = self
 
         timer = .scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.pollClipboard()
@@ -36,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationWillTerminate(_: Notification) { timer?.invalidate() }
 
-    // MARK: Polling logic
+    // MARK: Clipboard polling
     private func pollClipboard() {
         let cnt = pb.changeCount
         guard cnt != lastCnt else { return }
@@ -53,11 +54,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    // MARK: Pop-over
+    // MARK: Pop-over presentation
     private func showPopover(text: String) {
         os_log("[ClipTranslator] will-show popover")
 
-        // 1) Якорь 1×1 px под курсором
+        // 1) Якорное окно 1×1 px под курсором
         let pt = NSEvent.mouseLocation
         let frame = NSRect(x: pt.x, y: pt.y, width: 1, height: 1)
 
@@ -81,16 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         previousApp = NSWorkspace.shared.frontmostApplication
         NSApp.activate(ignoringOtherApps: true)
 
-        // 3) Показываем якорь
+        // 3) Выводим якорь
         anchorWin?.orderFront(nil)
 
-        // 4) Готовим SwiftUI-контроллер и подгоняем размер
+        // 4) SwiftUI-контроллер + точный размер
         let host = NSHostingController(rootView: TranslationBubble(text: text))
         host.view.layoutSubtreeIfNeeded()
         popover.contentViewController = host
         popover.contentSize = host.view.fittingSize
 
-        // 5) Выводим pop-over
+        // 5) Показываем pop-over
         popover.show(
             relativeTo: anchorWin!.contentView!.bounds,
             of:         anchorWin!.contentView!,
@@ -101,20 +102,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     // MARK: NSPopoverDelegate
+    func popoverWillClose(_ notification: Notification) {
+        os_log("[ClipTranslator] popover will close")
+        anchorWin?.orderOut(nil)     // прячем якорь сразу
+        restoreFocus()               // моментально возвращаем фокус
+    }
+
     func popoverDidClose(_ notification: Notification) {
-        os_log("[ClipTranslator] popover closed")
+        os_log("[ClipTranslator] popover did close")
+        // здесь уже всё сделано (оставляем для возможной отладки)
+    }
 
-        // Убираем якорь
-        anchorWin?.orderOut(nil)
-
-        // Возвращаем фокус прежнему приложению
+    // Быстрое восстановление фокуса
+    private func restoreFocus() {
         if let app = previousApp, !app.isTerminated {
             app.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
         }
         previousApp = nil
     }
 
-    // MARK: Status-bar
+    // MARK: Status-bar menu
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let btn = statusItem.button {

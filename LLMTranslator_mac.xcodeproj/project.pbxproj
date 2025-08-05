@@ -29,9 +29,22 @@
 		846EFBDD2E41D6A1004839C4 /* LLMTranslator_macUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LLMTranslator_macUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		846EFC082E423B52004839C4 /* Exceptions for "LLMTranslator_mac" folder in "LLMTranslator_mac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Untitled.swift,
+			);
+			target = 846EFBC42E41D6A0004839C4 /* LLMTranslator_mac */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		846EFBC72E41D6A0004839C4 /* LLMTranslator_mac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				846EFC082E423B52004839C4 /* Exceptions for "LLMTranslator_mac" folder in "LLMTranslator_mac" target */,
+			);
 			path = LLMTranslator_mac;
 			sourceTree = "<group>";
 		};
