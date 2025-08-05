@@ -1,9 +1,10 @@
 import Foundation
 
-/// Single-threaded actor wrapper around LM Studio.
-/// Connects via 127.0.0.1 to avoid DNS inside the App Sandbox, composes a chat
-/// request with system rules and three few‑shot examples, and returns ONLY the
-/// translated text.
+/// Single-threaded actor wrapper around LM Studio.
+/// Builds an OpenAI-compatible chat request, disables tool-calling ("tool_choice: \"none\"") and,
+/// for Qwen-family models, explicitly turns off <think></think> output via `enable_thinking: false`.
+/// Any residual <think> … </think> blocks (or stray closing tags) are stripped from the final
+/// response before returning it to the UI.
 actor Translator {
 
     // MARK: Singleton
@@ -13,87 +14,121 @@ actor Translator {
     private struct Message: Codable {
         let role: String
         let content: String
+        var dict: [String: String] { ["role": role, "content": content] }
     }
-
-    private struct RequestBody: Codable {
-        let model: String
-        let temperature: Double
-        let max_tokens: Int
-        let messages: [Message]
-    }
-
-    private struct Choice: Codable { let message: Message }
-    private struct ResponseBody: Codable { let choices: [Choice] }
 
     // MARK: - Configuration
-    /// Change the port if LM Studio listens on a different one.
-    /// NOTE: Use 127.0.0.1 instead of “localhost” to bypass DNS, which is often
-    /// blocked by the App Sandbox (error -1003 / -72000).
-    private let endpoint = URL(string: "http://127.0.0.1:1234/v1/chat/completions")!
-    private let modelName = "local"          // Any placeholder works for LM Studio
-    private let session   = URLSession(configuration: .ephemeral)
+    /// Use 127.0.0.1 rather than “localhost” — the App Sandbox may block DNS
+    /// inside the process (error -1003 / -72000).
+    private let endpoint   = URL(string: "http://127.0.0.1:1234/v1/chat/completions")!
+    private let modelName  = "local"      // Placeholder; LM Studio ignores it.
+    private let session    = URLSession(configuration: .ephemeral)
+    private let maxTokens  = 1024
+    private let temperature: Double = 0.0
+
+    // Behaviour toggles — tweak as needed in future UI settings.
+    private let disableTools      = true   // “tool_choice: \"none\"” prevents tool calls.
+    private let disableThinking   = true   // Adds “enable_thinking: false” for Qwen-family.
 
     // MARK: - Public API
-    /// Translates `text` from `srcLang` → `dstLang` using LM Studio.
-    /// - Parameters:
-    ///   - text:    Plain string to translate.
-    ///   - srcLang: Source language (ISO‑639‑1), e.g. "en".
-    ///   - dstLang: Target language (ISO‑639‑1), e.g. "ru".
+    /// Translates `text` from `srcLang` ⇄ `dstLang` using LM Studio.
     func translate(_ text: String, from srcLang: String, to dstLang: String) async throws -> String {
-
-        // 1) Compose chat messages with few‑shot examples
         let messages = buildMessages(for: text, from: srcLang, to: dstLang)
+        let payload  = try makeRequestPayload(messages: messages)
+        let data     = try await post(payload)
+        return try extractAnswer(from: data)
+    }
 
-        // 2) Encode request JSON
-        let body = RequestBody(
-            model: modelName,
-            temperature: 0.0,
-            max_tokens: 1024,
-            messages: messages
-        )
+    // MARK: - Networking helpers
+    private func post(_ body: Data) async throws -> Data {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = body
 
-        // 3) Perform network call
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw NSError(domain: "Translator", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "LM Studio is not reachable at \(endpoint)"])
+                          userInfo: [NSLocalizedDescriptionKey: "LM Studio is not reachable at \(endpoint)"])
         }
+        return data
+    }
 
-        // 4) Decode response
+    private func extractAnswer(from data: Data) throws -> String {
+        struct Choice: Decodable { let message: Message }
+        struct ResponseBody: Decodable { let choices: [Choice] }
         let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
-        guard let answer = decoded.choices.first?.message.content else {
+        guard let raw = decoded.choices.first?.message.content else {
             throw NSError(domain: "Translator", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Empty response from language model"])
         }
-        return answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean(raw)
     }
 
-    // MARK: - Helpers
-    /// Builds system prompt + 3 few‑shot examples + current user request.
+    // MARK: - Post-processing
+    /// Removes any Qwen-style thinking blocks or stray tags, then trims whitespace.
+    private func clean(_ text: String) -> String {
+        // 1) Remove complete <think> … </think> blocks (non-greedy, DOTALL).
+        var cleaned = text.replacingOccurrences(
+            of: "(?s)<think>.*?</think>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        // 2) Remove any remaining opening/closing tags (e.g. stray </think>).
+        cleaned = cleaned.replacingOccurrences(
+            of: "</?think>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Payload builder
+    private func makeRequestPayload(messages: [Message]) throws -> Data {
+        var dict: [String: Any] = [
+            "model":        modelName,
+            "temperature":  temperature,
+            "max_tokens":   maxTokens,
+            "messages":     messages.map { $0.dict },
+            "stream":       false
+        ]
+        if disableTools {
+            dict["tool_choice"] = "none"  // Prevent tool-calling.
+        }
+        if disableThinking {
+            // Qwen-specific flag; ignored by other models, so safe to always include.
+            dict["enable_thinking"] = false
+        }
+        return try JSONSerialization.data(withJSONObject: dict, options: [])
+    }
+
+    // MARK: - Prompt construction
     private func buildMessages(for text: String, from srcLang: String, to dstLang: String) -> [Message] {
-        // System rules
+        // System rules (bi-directional).
         let systemPrompt = """
-        You are a bilingual translation assistant. Always translate the user's message from \(srcLang.uppercased()) to \(dstLang.uppercased()) or \(dstLang.uppercased()) to \(srcLang.uppercased()).   It can be char, word(s) frases or big text. 
+        You are a bilingual translation assistant. Always translate the user's message. 
+            It can be a single character, word, phrase or large text.
         Rules:
         1. Preserve meaning, tone, punctuation, and formatting.
         2. Output ONLY the translated text without additional commentary.
+        /no_think
         
-        Example: 
-        1. word -> слово,
+        3. If user request is English text, translate and take it up in Russian.
+        4. If user request is Russian text, translate and take it up in English.
+
+        Example:
+        1. word -> слово
         2. Что ещё нужно проверить -> What else needs to be checked
         """
 
-//        let systemPrompt = ""
-
-        // Three few‑shot demonstration pairs (user → assistant)
+        // Few-shot demonstration pairs (user → assistant)
         let examples: [(String, String)] = [
+            ("Не всегда все зависит от нас самих, бывает, мы оказываемся не в то время не в том месте", "Not everything depends on us, sometimes we find ourselves at the wrong place at the wrong time. Everything can change in a moment."),
             ("Hello, how are you?", "Привет, как дела?"),
-            ("Спасибо за помощь.", "Thank you for your help."),
-            ("Can you translate this text quickly?", "Можешь быстро перевести этот текст?")
+            ("Can you translate this text quickly?", "Можешь быстро перевести этот текст?"),
+            ("The Janus pro 7b output were drastically disaster for me.", "Выход Janus Pro 7b был радикально катастрофой для меня."),
+            ("Привет! Рад тебя видеть на своём канале :)", "Hello! Nice to see you on my channel :)"),
+            ("песня звучит в фильме Ведьмина гора", "The song is from the movie The Witch Mountain"),
         ]
 
         var msgs = [Message(role: "system", content: systemPrompt)]
@@ -101,7 +136,6 @@ actor Translator {
             msgs.append(Message(role: "user",      content: u))
             msgs.append(Message(role: "assistant", content: a))
         }
-        // Highlighted text from clipboard becomes the new user request
         msgs.append(Message(role: "user", content: text))
         return msgs
     }
