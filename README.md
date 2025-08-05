@@ -1,4 +1,4 @@
-# ClipTranslator
+# LLMTranslator_mac
 
 Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU translation bubble.
 
