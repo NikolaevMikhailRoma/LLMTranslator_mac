@@ -1,0 +1,25 @@
+{
+  "model": "openai/gpt-oss-20b",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a bilingual translation assistant. Always translate the user's message. Preserve meaning, tone, punctuation, and formatting. Output ONLY the translated text without additional commentary."
+    },
+    {
+      "role": "user",
+      "content": "The Janus pro 7b output were drastically disaster for me."
+    },
+    {
+      "role": "assistant",
+      "content": "Выход Janus Pro 7b был радикально катастрофой для меня."
+    },
+    {
+      "role": "user",
+      "content": "песня звучит в фильме Ведьмина гора"
+    },
+    {
+      "role": "assistant",
+      "content": "The song is from the movie The Witch Mountain"
+    }
+  ]
+}

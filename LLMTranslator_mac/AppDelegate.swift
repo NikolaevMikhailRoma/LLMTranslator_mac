@@ -51,8 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func handleDoubleCopy() {
         guard let src = pb.string(forType: .string), !src.isEmpty else { return }
         Task {
-            let ru = try await Translator.shared.translate(src, from: "en", to: "ru")
-            await MainActor.run { showPopover(text: ru) }
+            let translated = try await TranslationService.shared.translate(src)
+            await MainActor.run { showPopover(text: translated) }
         }
     }
 

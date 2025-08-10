@@ -13,3 +13,4 @@ struct TranslationBubble: View {
             .fixedSize(horizontal: true, vertical: true) // bubble сам рассчитывает ширину/высоту
     }
 }
+
