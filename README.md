@@ -1,6 +1,6 @@
 # LLMTranslator_mac
 
-Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU translation bubble.
+Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU or RU↔EN translation bubble. Language choosing automaticly.
 
 - Monitors clipboard; shows SwiftUI pop‑over at cursor.
 - Calls local LLM via LM Studio (OpenAI‑style API on 127.0.0.1:1234).
