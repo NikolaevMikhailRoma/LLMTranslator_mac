@@ -10,16 +10,27 @@ public actor TranslationService {
     private var provider: TranslationProvider
 
     private init() {
-        // For now, always use LM Studio provider.
-        // In the future, pick based on SettingsStore.shared.config.
-        self.provider = LMStudioProvider()
+        // Pick provider based on the current configuration mode.
+        switch SettingsStore.shared.config.mode {
+        case .offline:
+            self.provider = LMStudioProvider()
+        case .online:
+            // For now, reuse LMStudioProvider interface targeting online endpoint.
+            self.provider = LMStudioProvider()
+        }
     }
 
     /// Updates the underlying provider if configuration changes require it.
     /// This can be called from settings UI after the user changes the engine.
     public func reloadProviderIfNeeded() {
-        // Placeholder for future multi-engine support.
-        // Currently always LMStudioProvider; no-op.
+        // Currently both modes use the same provider class but different endpoints.
+        // If in the future we add a dedicated OnlineProvider, switch here.
+        switch SettingsStore.shared.config.mode {
+        case .offline:
+            self.provider = LMStudioProvider()
+        case .online:
+            self.provider = LMStudioProvider()
+        }
     }
 
     /// Translates text using the selected provider.

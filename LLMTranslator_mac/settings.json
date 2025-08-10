@@ -1,0 +1,13 @@
+{
+  "languageCodes": ["ru", "en"],
+  "mode": "offline",
+  "online": {
+    "base_url": "https://api.example.com/v1/chat/completions"
+  },
+  "offline": {
+    "port": 1234,
+    "path": "/v1/chat/completions",
+    "model": "qwen/qwen3-1.7b"
+  },
+  "doubleCopyGapSeconds": 0.3
+}

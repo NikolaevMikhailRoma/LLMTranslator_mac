@@ -29,7 +29,7 @@ public final class LMStudioProvider: TranslationProvider {
 
     // MARK: - Networking helpers
     private func post(_ body: Data) async throws -> Data {
-        guard let endpoint = SettingsStore.shared.config.chatCompletionsURL else {
+        guard let endpoint = SettingsStore.shared.config.effectiveChatCompletionsURL else {
             throw NSError(domain: "LMStudioProvider", code: 100,
                           userInfo: [NSLocalizedDescriptionKey: "Invalid Chat Completions URL in settings"])
         }
@@ -76,7 +76,7 @@ public final class LMStudioProvider: TranslationProvider {
     // MARK: - Payload builder
     private func makeRequestPayload(messages: [[String: String]]) throws -> Data {
         var dict: [String: Any] = [
-            "model":        SettingsStore.shared.config.modelName,
+            "model":        SettingsStore.shared.config.effectiveModelName,
             "temperature":  0.0,
             "max_tokens":   1024,
             "messages":     messages,
