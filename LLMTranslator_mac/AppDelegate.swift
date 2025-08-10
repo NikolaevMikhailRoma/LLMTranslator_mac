@@ -16,7 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let pb = NSPasteboard.general
     private var lastCnt  = NSPasteboard.general.changeCount
     private var lastTime = Date()
-    private let dblGap: TimeInterval = 0.30
+    private var dblGap: TimeInterval {
+        SettingsStore.shared.config.doubleCopyGapSeconds
+    }
 
     private var timer: Timer?
 

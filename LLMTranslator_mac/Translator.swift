@@ -1,5 +1,7 @@
 import Foundation
 
+// Access shared settings for endpoint and model configuration.
+
 /// Single-threaded actor wrapper around LM Studio.
 /// Builds an OpenAI-compatible chat request, disables tool-calling ("tool_choice: \"none\"") and,
 /// for Qwen-family models, explicitly turns off <think></think> output via `enable_thinking: false`.
@@ -18,11 +20,21 @@ actor Translator {
     }
 
     // MARK: - Configuration
-    /// Use 127.0.0.1 rather than “localhost” — the App Sandbox may block DNS
-    /// inside the process (error -1003 / -72000).
-    private let endpoint   = URL(string: "http://127.0.0.1:1234/v1/chat/completions")!
-    private let modelName  = "local"      // Placeholder; LM Studio ignores it.
-    private let session    = URLSession(configuration: .ephemeral)
+    /// URLSession configuration and runtime settings are derived from SettingsStore.
+    private let session: URLSession = {
+        // Use a tuned default configuration (no cache/cookies) instead of ephemeral.
+        // This avoids certain lower-level socket options being applied by the system
+        // that may trigger SO_NOWAKEFROMSLEEP warnings on some setups.
+        let cfg = URLSessionConfiguration.default
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.urlCache = nil
+        cfg.httpShouldSetCookies = false
+        cfg.httpCookieAcceptPolicy = .never
+        cfg.allowsExpensiveNetworkAccess = true
+        cfg.allowsConstrainedNetworkAccess = true
+        cfg.waitsForConnectivity = false
+        return URLSession(configuration: cfg)
+    }()
     private let maxTokens  = 1024
     private let temperature: Double = 0.0
 
@@ -41,6 +53,10 @@ actor Translator {
 
     // MARK: - Networking helpers
     private func post(_ body: Data) async throws -> Data {
+        guard let endpoint = SettingsStore.shared.config.chatCompletionsURL else {
+            throw NSError(domain: "Translator", code: 100,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid Chat Completions URL in settings"])
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -86,7 +102,7 @@ actor Translator {
     // MARK: - Payload builder
     private func makeRequestPayload(messages: [Message]) throws -> Data {
         var dict: [String: Any] = [
-            "model":        modelName,
+            "model":        SettingsStore.shared.config.modelName,
             "temperature":  temperature,
             "max_tokens":   maxTokens,
             "messages":     messages.map { $0.dict },
