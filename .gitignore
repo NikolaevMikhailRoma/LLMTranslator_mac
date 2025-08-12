@@ -3,3 +3,4 @@ LLMTranslator_mac.xcodeproj/
 LLMTranslator_macTests/
 LLMTranslator_macUITests/
 *task_list.md
+.cursor*

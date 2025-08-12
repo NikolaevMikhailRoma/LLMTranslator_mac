@@ -36,35 +36,55 @@ public actor TranslationService {
     /// Translates text using the selected provider.
     /// - Parameter text: Input text.
     /// - Returns: Translated text.
-    public func translate(_ text: String) async throws -> String {
-        let (src, dst) = determineLanguageDirection(for: text)
-        return try await provider.translate(text: text, from: src, to: dst)
+    public func translate(_ text: String) async throws -> (result: String, source: String, target: String) {
+        let (src, dst) = determineLanguageDirectionByCounting(for: text)
+        let translated = try await provider.translate(text: text, from: src, to: dst)
+        return (translated, src, dst)
     }
 
-    /// Determines source and target language codes using NLLanguageRecognizer and app configuration.
-    private func determineLanguageDirection(for text: String) -> (String, String) {
+    /// Determines source and target language codes by counting characters per language.
+    /// Rules:
+    /// - Count characters using regex patterns from settings (or built-in defaults).
+    /// - Source is the language with the highest count among supported languages.
+    /// - Target is the first language in settings different from the source; if none, fallback to the other if available.
+    private func determineLanguageDirectionByCounting(for text: String) -> (String, String) {
         let cfg = SettingsStore.shared.config
-        let languages = cfg.languageCodes
-        guard let native = languages.first else {
-            return ("en", "ru")
+        let languages = cfg.languageCodes.map { $0.lowercased() }
+        guard !languages.isEmpty else { return ("en", "ru") }
+
+        // Build regexes map (language -> NSRegularExpression)
+        var langToRegex: [String: NSRegularExpression] = [:]
+        for code in languages {
+            let pattern: String
+            if let custom = cfg.languageDetectionRegexes?[code], !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pattern = custom
+            } else {
+                // Built-in defaults for common languages
+                switch code {
+                case "ru": pattern = "[\\p{Cyrillic}]" // Cyrillic script
+                case "en": pattern = "[A-Za-z]" // Latin letters
+                default: pattern = "[A-Za-z\\p{Cyrillic}]" // fallback covers en/ru mix
+                }
+            }
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                langToRegex[code] = regex
+            }
         }
 
-        // Detect language
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-        let detected = recognizer.dominantLanguage?.rawValue.lowercased()
-
-        // Choose target: if detected == native -> target is the first non-native in list (fallback to "en")
-        // else target is native.
-        let targetNonNative = languages.first(where: { $0.lowercased() != native.lowercased() }) ?? "en"
-
-        if let detected = detected, detected == native.lowercased() {
-            return (native.lowercased(), targetNonNative.lowercased())
-        } else {
-            // If detection failed or is not native, translate to native.
-            let src = detected ?? targetNonNative
-            return (src.lowercased(), native.lowercased())
+        // Count matches per language
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        var bestLang = languages.first!
+        var bestCount = -1
+        for code in languages {
+            guard let regex = langToRegex[code] else { continue }
+            let count = regex.numberOfMatches(in: text, options: [], range: fullRange)
+            if count > bestCount { bestCount = count; bestLang = code }
         }
+
+        let source = bestLang
+        // Target: the first language in settings different from source
+        let target = languages.first(where: { $0 != source }) ?? (languages.count > 1 ? languages[1] : (source == "en" ? "ru" : "en"))
+        return (source, target)
     }
 }
 

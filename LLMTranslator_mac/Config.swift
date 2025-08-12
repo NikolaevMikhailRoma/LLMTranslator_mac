@@ -26,6 +26,11 @@ public struct OfflineConfig: Codable, Equatable {
 public struct AppConfig: Codable, Equatable {
     /// Language codes with the first treated as the user's initial language.
     public var languageCodes: [String]
+    /// Optional regex rules for counting characters per language to detect source language.
+    /// Keys are language codes (e.g., "ru", "en"), values are regex patterns that match
+    /// a single character belonging to that language alphabet. If missing, built-in
+    /// defaults are used (Latin for "en", Cyrillic for "ru").
+    public var languageDetectionRegexes: [String: String]? = nil
     /// Operational mode.
     public var mode: ConnectionMode
     /// Online endpoint settings.
