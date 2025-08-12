@@ -7,6 +7,7 @@ struct TranslationBubble: View {
         Text(text)
             .font(.system(size: 15))
             .multilineTextAlignment(.leading)          // сохраняем выравнивание
+            .textSelection(.enabled)                   // Enable mouse text selection in the popover
             .padding(12)
             .background(.regularMaterial)              // «капля» macOS
             .cornerRadius(12)
