@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover   = NSPopover()
     private var anchorWin: NSWindow?
+    private var keyMonitor: Any?
+    private var currentPopoverText: String = ""
 
     // Кто был активным до показа пузыря
     private var previousApp: NSRunningApplication?
@@ -60,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: Pop-over presentation
     private func showPopover(text: String) {
         os_log("[ClipTranslator] will-show popover")
+        currentPopoverText = text
 
         // 1) Якорное окно 1×1 px под курсором
         let pt = NSEvent.mouseLocation
@@ -102,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
 
         os_log("[ClipTranslator] did-show popover")
+
+        // Install Cmd+C monitor to copy whole result without mouse selection
+        installCopyKeyMonitor()
     }
 
     // MARK: NSPopoverDelegate
@@ -109,6 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         os_log("[ClipTranslator] popover will close")
         anchorWin?.orderOut(nil)     // прячем якорь сразу
         restoreFocus()               // моментально возвращаем фокус
+
+        // Remove key monitor to avoid leaking and global interception
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
     }
 
     func popoverDidClose(_ notification: Notification) {
@@ -137,5 +149,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+
+    // MARK: Keyboard handling (Cmd+C)
+    /// Installs a local keyDown monitor that handles Command+C.
+    /// If there is an active text selection inside the popover (NSTextView with non-empty range),
+    /// lets the system handle copy of the selection. Otherwise copies the entire translated text.
+    private func installCopyKeyMonitor() {
+        // Remove previous monitor if any
+        if let monitor = keyMonitor { NSEvent.removeMonitor(monitor) }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+            // Check for Command + C
+            if event.modifierFlags.contains(.command),
+               event.charactersIgnoringModifiers?.lowercased() == "c" {
+                // 1) First try standard copy action (works when there is a selection)
+                if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) {
+                    return nil // handled by responder chain
+                }
+                // 2) No selection or no responder: copy entire text from the popover
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(self.currentPopoverText, forType: .string)
+                return nil // swallow so it doesn't beep
+            }
+            return event
+        }
+    }
 }
 
