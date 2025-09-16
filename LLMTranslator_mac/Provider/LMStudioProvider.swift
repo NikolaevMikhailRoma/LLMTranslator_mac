@@ -101,26 +101,21 @@ public final class LMStudioProvider: TranslationProvider {
         /no_think
         """
 
-        let allExamples: [String: [(String, String)]] = [
-            "en-ru": [
-                ("Hello, how are you?", "Привет, как дела?"),
-                ("Can you translate this text quickly?", "Можешь быстро перевести этот текст?"),
-                ("The Janus pro 7b output were drastically disaster for me.", "Выход Janus Pro 7b был радикально катастрофой для меня."),
-            ],
-            "ru-en": [
-                ("Не всегда все зависит от нас самих, бывает, мы оказываемся не в то время не в том месте", "Not everything depends on us, sometimes we find ourselves at the wrong place at the wrong time. Everything can change in a moment."),
-                ("Привет! Рад тебя видеть на своём канале :)", "Hello! Nice to see you on my channel :)"),
-                ("песня звучит в фильме Ведьмина гора", "The song is from the movie The Witch Mountain")
-            ]
-        ]
-
-        let examples = allExamples["\(srcLang)-\(dstLang)"] ?? []
-
         var msgs: [[String: String]] = [["role": "system", "content": systemPrompt]]
-        for (u, a) in examples {
-            msgs.append(["role": "user",      "content": u])
-            msgs.append(["role": "assistant", "content": a])
+
+        if let url = Bundle.main.url(forResource: "few_shot_examples", withExtension: "json"),
+           let data = try? Data(contentsOf: url) {
+            let decoder = JSONDecoder()
+            if let examples = try? decoder.decode([[String: String]].self, from: data) {
+                for example in examples {
+                    if let srcText = example[srcLang], let dstText = example[dstLang] {
+                        msgs.append(["role": "user",      "content": srcText])
+                        msgs.append(["role": "assistant", "content": dstText])
+                    }
+                }
+            }
         }
+
         msgs.append(["role": "user", "content": text])
         return msgs
     }

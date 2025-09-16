@@ -22,6 +22,14 @@ public struct OfflineConfig: Codable, Equatable {
     public var model: String
 }
 
+public struct RequestBody: Codable, Equatable {
+    public var temperature: Double
+    public var max_tokens: Int
+    public var stream: Bool
+    public var tool_choice: String
+    public var enable_thinking: Bool
+}
+
 /// Minimal app configuration loaded from a single JSON file.
 public struct AppConfig: Codable, Equatable {
     /// Language codes with the first treated as the user's initial language.
@@ -39,6 +47,8 @@ public struct AppConfig: Codable, Equatable {
     public var offline: OfflineConfig
     /// Time window in seconds to detect a double copy gesture.
     public var doubleCopyGapSeconds: Double
+    /// Request body parameters.
+    public var requestBody: RequestBody
 
     /// Full Chat Completions URL depending on the selected mode.
     public var effectiveChatCompletionsURL: URL? {

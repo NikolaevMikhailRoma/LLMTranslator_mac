@@ -9,5 +9,12 @@
     "path": "/v1/chat/completions",
     "model": "qwen/qwen3-1.7b"
   },
-  "doubleCopyGapSeconds": 0.3
+  "doubleCopyGapSeconds": 0.3,
+  "requestBody": {
+    "temperature": 0.0,
+    "max_tokens": 1024,
+    "stream": false,
+    "tool_choice": "none",
+    "enable_thinking": false
+  }
 }
