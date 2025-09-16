@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var keyMonitor: Any?
     private var currentPopoverText: String = ""
 
-    // Кто был активным до показа пузыря
+    // Who was active before the bubble was shown
     private var previousApp: NSRunningApplication?
 
     // MARK: Clipboard
@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private var timer: Timer?
+    private var translationService: TranslationService!
+    private var languageDetector: LanguageDetector!
 
     // MARK: App lifecycle
     func applicationDidFinishLaunching(_: Notification) {
@@ -31,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
+
+        let config = SettingsStore.shared.config
+        let provider = LMStudioProvider()
+        languageDetector = LanguageDetector(config: config)
+        translationService = TranslationService(provider: provider, languageDetector: languageDetector)
 
         timer = .scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.pollClipboard()
@@ -53,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func handleDoubleCopy() {
         guard let src = pb.string(forType: .string), !src.isEmpty else { return }
         Task {
-            let tuple = try await TranslationService.shared.translate(src)
+            let tuple = try await translationService.translate(src)
             let prefix = "\(tuple.source) -> \(tuple.target)\n"
             await MainActor.run { showPopover(text: prefix + tuple.result) }
         }
@@ -64,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         os_log("[ClipTranslator] will-show popover")
         currentPopoverText = text
 
-        // 1) Якорное окно 1×1 px под курсором
+        // 1) 1x1 px anchor window under the cursor
         let pt = NSEvent.mouseLocation
         let frame = NSRect(x: pt.x, y: pt.y, width: 1, height: 1)
 
@@ -84,20 +91,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             anchorWin?.setFrame(frame, display: false)
         }
 
-        // 2) Запоминаем текущее фронт-приложение и активируем себя
+        // 2) Remember the current front application and activate self
         previousApp = NSWorkspace.shared.frontmostApplication
         NSApp.activate(ignoringOtherApps: true)
 
-        // 3) Выводим якорь
+        // 3) Show the anchor
         anchorWin?.orderFront(nil)
 
-        // 4) SwiftUI-контроллер + точный размер
+        // 4) SwiftUI controller + exact size
         let host = NSHostingController(rootView: TranslationBubble(text: text))
         host.view.layoutSubtreeIfNeeded()
         popover.contentViewController = host
         popover.contentSize = host.view.fittingSize
 
-        // 5) Показываем pop-over
+        // 5) Show the pop-over
         popover.show(
             relativeTo: anchorWin!.contentView!.bounds,
             of:         anchorWin!.contentView!,
@@ -113,8 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: NSPopoverDelegate
     func popoverWillClose(_ notification: Notification) {
         os_log("[ClipTranslator] popover will close")
-        anchorWin?.orderOut(nil)     // прячем якорь сразу
-        restoreFocus()               // моментально возвращаем фокус
+        anchorWin?.orderOut(nil)     // Hide the anchor immediately
+        restoreFocus()               // Restore focus immediately
 
         // Remove key monitor to avoid leaking and global interception
         if let monitor = keyMonitor {
@@ -125,10 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         os_log("[ClipTranslator] popover did close")
-        // здесь уже всё сделано (оставляем для возможной отладки)
+        // Everything is already done here (left for possible debugging)
     }
 
-    // Быстрое восстановление фокуса
+    // Fast focus restoration
     private func restoreFocus() {
         if let app = previousApp, !app.isTerminated {
             app.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
@@ -176,4 +183,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 }
-

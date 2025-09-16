@@ -22,9 +22,12 @@ public final class LMStudioProvider: TranslationProvider {
 
     public func translate(text: String, from sourceLanguageCode: String, to targetLanguageCode: String) async throws -> String {
         let messages = buildMessages(for: text, from: sourceLanguageCode, to: targetLanguageCode)
+        print("Prompt messages: \(messages)")
         let payload  = try makeRequestPayload(messages: messages)
         let data     = try await post(payload)
-        return try extractAnswer(from: data)
+        let response = try extractAnswer(from: data)
+        print("Response: \(response)")
+        return response
     }
 
     // MARK: - Networking helpers
@@ -90,24 +93,28 @@ public final class LMStudioProvider: TranslationProvider {
     // MARK: - Prompt construction
     private func buildMessages(for text: String, from srcLang: String, to dstLang: String) -> [[String: String]] {
         let systemPrompt = """
-        You are a bilingual translation assistant. Always translate the user's message. 
+        You are a bilingual translation assistant. Always translate the user's message from \(srcLang) to \(dstLang).
             It can be a single character, word, phrase or large text.
         Rules:
         1. Preserve meaning, tone, punctuation, and formatting.
         2. Output ONLY the translated text without additional commentary.
         /no_think
-        3. If user request is English text, translate and take it up in Russian.
-        4. If user request is Russian text, translate and take it up in English.
         """
 
-        let examples: [(String, String)] = [
-            ("Не всегда все зависит от нас самих, бывает, мы оказываемся не в то время не в том месте", "Not everything depends on us, sometimes we find ourselves at the wrong place at the wrong time. Everything can change in a moment."),
-            ("Hello, how are you?", "Привет, как дела?"),
-            ("Can you translate this text quickly?", "Можешь быстро перевести этот текст?"),
-            ("The Janus pro 7b output were drastically disaster for me.", "Выход Janus Pro 7b был радикально катастрофой для меня."),
-            ("Привет! Рад тебя видеть на своём канале :)", "Hello! Nice to see you on my channel :)"),
-            ("песня звучит в фильме Ведьмина гора", "The song is from the movie The Witch Mountain")
+        let allExamples: [String: [(String, String)]] = [
+            "en-ru": [
+                ("Hello, how are you?", "Привет, как дела?"),
+                ("Can you translate this text quickly?", "Можешь быстро перевести этот текст?"),
+                ("The Janus pro 7b output were drastically disaster for me.", "Выход Janus Pro 7b был радикально катастрофой для меня."),
+            ],
+            "ru-en": [
+                ("Не всегда все зависит от нас самих, бывает, мы оказываемся не в то время не в том месте", "Not everything depends on us, sometimes we find ourselves at the wrong place at the wrong time. Everything can change in a moment."),
+                ("Привет! Рад тебя видеть на своём канале :)", "Hello! Nice to see you on my channel :)"),
+                ("песня звучит в фильме Ведьмина гора", "The song is from the movie The Witch Mountain")
+            ]
         ]
+
+        let examples = allExamples["\(srcLang)-\(dstLang)"] ?? []
 
         var msgs: [[String: String]] = [["role": "system", "content": systemPrompt]]
         for (u, a) in examples {
