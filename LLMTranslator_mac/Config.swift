@@ -62,6 +62,11 @@ public struct AppConfig: Codable, Equatable {
     /// Maximum line length for the translated text.
     public var maxLineLength: Int?
 
+    enum CodingKeys: String, CodingKey {
+        case languageCodes, languageDetectionRegexes, mode, online, offline, doubleCopyGapSeconds, requestBody
+        case maxLineLength = "max_line_length"
+    }
+
     /// Full Chat Completions URL depending on the selected mode.
     public var effectiveChatCompletionsURL: URL? {
         switch mode {
@@ -97,7 +102,8 @@ public final class SettingsStore: ObservableObject {
         }
         do {
             let data = try Data(contentsOf: url)
-            self.config = try JSONDecoder().decode(AppConfig.self, from: data)
+            let decoder = JSONDecoder()
+            self.config = try decoder.decode(AppConfig.self, from: data)
         } catch {
             fatalError("Failed to load settings.json: \(error)")
         }
