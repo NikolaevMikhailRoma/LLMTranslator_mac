@@ -1,7 +1,7 @@
 import Foundation
 
-/// LM Studio-backed provider using OpenAI-compatible Chat Completions endpoint.
-public final class LMStudioProvider: TranslationProvider {
+/// A provider that connects to any OpenAI-compatible Chat Completions endpoint.
+public final class LLMProvider: TranslationProvider {
     private let session: URLSession
 
     public init(session: URLSession? = nil) {
@@ -22,28 +22,34 @@ public final class LMStudioProvider: TranslationProvider {
 
     public func translate(text: String, from sourceLanguageCode: String, to targetLanguageCode: String) async throws -> String {
         let messages = buildMessages(for: text, from: sourceLanguageCode, to: targetLanguageCode)
-        print("Prompt messages: \(messages)")
         let payload  = try makeRequestPayload(messages: messages)
         let data     = try await post(payload)
         let response = try extractAnswer(from: data)
-        print("Response: \(response)")
         return response
     }
 
     // MARK: - Networking helpers
     private func post(_ body: Data) async throws -> Data {
-        guard let endpoint = SettingsStore.shared.config.effectiveChatCompletionsURL else {
-            throw NSError(domain: "LMStudioProvider", code: 100,
-                          userInfo: [NSLocalizedDescriptionKey: "Invalid Chat Completions URL in settings"])
+        let config = SettingsStore.shared.config
+        guard let endpoint = URL(string: config.baseURL) else {
+            throw NSError(domain: "LLMProvider", code: 100,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL in settings: \(config.baseURL)"])
         }
+
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let apiKey = config.apiKey, !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
         request.httpBody = body
         let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw NSError(domain: "LMStudioProvider", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "LM Studio is not reachable at \(endpoint)"])
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(domain: "LLMProvider", code: statusCode,
+                          userInfo: [NSLocalizedDescriptionKey: "The API endpoint is not reachable or returned an error. Status: \(statusCode)"])
         }
         return data
     }
@@ -54,7 +60,7 @@ public final class LMStudioProvider: TranslationProvider {
         struct ResponseBody: Decodable { let choices: [Choice] }
         let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
         guard let raw = decoded.choices.first?.message.content else {
-            throw NSError(domain: "LMStudioProvider", code: 2,
+            throw NSError(domain: "LLMProvider", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Empty response from language model"])
         }
         return clean(raw)
@@ -78,8 +84,13 @@ public final class LMStudioProvider: TranslationProvider {
 
     // MARK: - Payload builder
     private func makeRequestPayload(messages: [[String: String]]) throws -> Data {
-        var dict = SettingsStore.shared.config.requestBody.toDictionary()
-        dict["model"] = SettingsStore.shared.config.effectiveModelName
+        let config = SettingsStore.shared.config
+        var dict = config.requestBody.toDictionary()
+        
+        if let modelId = config.modelIdentifier, !modelId.isEmpty {
+            dict["model"] = modelId
+        }
+        
         dict["messages"] = messages
         return try JSONSerialization.data(withJSONObject: dict, options: [])
     }
@@ -114,4 +125,3 @@ public final class LMStudioProvider: TranslationProvider {
         return msgs
     }
 }
-

@@ -1,21 +1,19 @@
 {
-  "languageCodes": ["ru", "en"],
-  "mode": "offline",
-  "online": {
-    "base_url": "https://api.example.com/v1/chat/completions"
-  },
-  "offline": {
-    "port": 1234,
-    "path": "/v1/chat/completions",
-    "model": "qwen/qwen3-1.7b"
-  },
-  "doubleCopyGapSeconds": 0.3,
-  "requestBody": {
-    "temperature": 0.0,
-    "max_tokens": 1024,
-    "stream": false,
-    "tool_choice": "none",
-    "enable_thinking": false
-  },
-  "max_line_length": 160
+    "baseURL": "http://localhost:1234/v1/chat/completions",
+    "apiKey": null,
+    "modelIdentifier": null,
+    "languageCodes": [
+        "ru",
+        "en"
+    ],
+    "languageDetectionRegexes": null,
+    "doubleCopyGapSeconds": 0.3,
+    "requestBody": {
+        "temperature": 0.0,
+        "max_tokens": 1024,
+        "stream": false,
+        "tool_choice": "none",
+        "enable_thinking": false
+    },
+    "maxLineLength": 80
 }

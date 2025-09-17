@@ -3,25 +3,6 @@ import Combine
 
 // MARK: - Models
 
-/// Connection mode: local LM Studio (offline) or remote API (online).
-public enum ConnectionMode: String, Codable, Equatable {
-    case offline
-    case online
-}
-
-/// Online configuration holding a full endpoint URL.
-public struct OnlineConfig: Codable, Equatable {
-    public var baseURLString: String
-    enum CodingKeys: String, CodingKey { case baseURLString = "base_url" }
-}
-
-/// Offline (LM Studio) configuration.
-public struct OfflineConfig: Codable, Equatable {
-    public var port: Int
-    public var path: String
-    public var model: String
-}
-
 public struct RequestBody: Codable, Equatable {
     public var temperature: Double
     public var max_tokens: Int
@@ -42,19 +23,17 @@ public struct RequestBody: Codable, Equatable {
 
 /// Minimal app configuration loaded from a single JSON file.
 public struct AppConfig: Codable, Equatable {
+    /// The base URL of the OpenAI-compatible API.
+    public var baseURL: String
+    /// The API key for the service. Optional, as local servers may not require one.
+    public var apiKey: String?
+    /// The identifier of the model to use. Optional, will rely on server's default if not provided.
+    public var modelIdentifier: String?
+
     /// Language codes with the first treated as the user's initial language.
     public var languageCodes: [String]
     /// Optional regex rules for counting characters per language to detect source language.
-    /// Keys are language codes (e.g., "ru", "en"), values are regex patterns that match
-    /// a single character belonging to that language alphabet. If missing, built-in
-    /// defaults are used (Latin for "en", Cyrillic for "ru").
     public var languageDetectionRegexes: [String: String]? = nil
-    /// Operational mode.
-    public var mode: ConnectionMode
-    /// Online endpoint settings.
-    public var online: OnlineConfig
-    /// Offline endpoint settings.
-    public var offline: OfflineConfig
     /// Time window in seconds to detect a double copy gesture.
     public var doubleCopyGapSeconds: Double
     /// Request body parameters.
@@ -63,28 +42,9 @@ public struct AppConfig: Codable, Equatable {
     public var maxLineLength: Int?
 
     enum CodingKeys: String, CodingKey {
-        case languageCodes, languageDetectionRegexes, mode, online, offline, doubleCopyGapSeconds, requestBody
+        case baseURL, apiKey, modelIdentifier, languageCodes, languageDetectionRegexes, doubleCopyGapSeconds, requestBody
         case maxLineLength = "max_line_length"
     }
-
-    /// Full Chat Completions URL depending on the selected mode.
-    public var effectiveChatCompletionsURL: URL? {
-        switch mode {
-        case .offline:
-            var comps = URLComponents()
-            comps.scheme = "http"
-            comps.host = "127.0.0.1"
-            comps.port = offline.port
-            comps.path = offline.path.hasPrefix("/") ? offline.path : "/" + offline.path
-            return comps.url
-        case .online:
-            let trimmed = online.baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-            return URL(string: trimmed)
-        }
-    }
-
-    /// Model name to request from the provider.
-    public var effectiveModelName: String { offline.model }
 }
 
 // MARK: - Settings store (read-only)
@@ -109,5 +69,3 @@ public final class SettingsStore: ObservableObject {
         }
     }
 }
-
- 

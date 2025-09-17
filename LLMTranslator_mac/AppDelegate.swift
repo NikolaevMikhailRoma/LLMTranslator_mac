@@ -1,183 +1,72 @@
 import Cocoa
 import SwiftUI
 import os.log
+import Combine
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: UI
     private var statusItem: NSStatusItem!
-    private var popover   = NSPopover()
-    private var anchorWin: NSWindow?
-    private var keyMonitor: Any?
-    private var currentPopoverText: String = ""
 
-    // Who was active before the bubble was shown
-    private var previousApp: NSRunningApplication?
-
-    // MARK: Clipboard
-    private let pb = NSPasteboard.general
-    private var lastCnt  = NSPasteboard.general.changeCount
-    private var lastTime = Date()
-    private var dblGap: TimeInterval {
-        SettingsStore.shared.config.doubleCopyGapSeconds
-    }
-
-    private var timer: Timer?
+    // MARK: Services
     private var translationService: TranslationService!
     private var languageDetector: LanguageDetector!
+    private var clipboardService: ClipboardService!
+    private var popoverService: PopoverService!
+    private var focusService: FocusService!
+    private var keyboardService: KeyboardService!
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: App lifecycle
     func applicationDidFinishLaunching(_: Notification) {
         buildStatusItem()
 
-        popover.behavior = .transient
-        popover.animates = true
-        popover.delegate = self
-
+        // 1. Load config
         let config = SettingsStore.shared.config
-        let provider = LMStudioProvider()
+
+        // 2. Initialize services
+        let provider = ProviderFactory.createProvider(for: config)
         languageDetector = LanguageDetector(config: config)
         translationService = TranslationService(provider: provider, languageDetector: languageDetector)
+        clipboardService = ClipboardService(config: config)
+        focusService = FocusService()
+        keyboardService = KeyboardService()
+        popoverService = PopoverService(config: config, focusService: focusService, keyboardService: keyboardService)
 
-        timer = .scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.pollClipboard()
-        }
-        RunLoop.main.add(timer!, forMode: .common)
-        os_log("[ClipTranslator] timer running")
-    }
-
-    func applicationWillTerminate(_: Notification) { timer?.invalidate() }
-
-    // MARK: Clipboard polling
-    private func pollClipboard() {
-        let cnt = pb.changeCount
-        guard cnt != lastCnt else { return }
-        let now = Date()
-        if now.timeIntervalSince(lastTime) <= dblGap { handleDoubleCopy() }
-        lastTime = now; lastCnt = cnt
-    }
-
-    private func handleDoubleCopy() {
-        guard let src = pb.string(forType: .string), !src.isEmpty else { return }
-        Task {
-            let tuple = try await translationService.translate(src)
-            let prefix = "\(tuple.source) -> \(tuple.target)\n"
-            await MainActor.run { showPopover(text: prefix + tuple.result) }
-        }
-    }
-
-    // MARK: Pop-over presentation
-    private func showPopover(text: String) {
-        os_log("[ClipTranslator] will-show popover")
-
-        // Wrap text before displaying
-        let maxLength = SettingsStore.shared.config.maxLineLength
-        let wrappedText = wrapText(text, maxLength: maxLength)
-        currentPopoverText = wrappedText
-
-        // 1) 1x1 px anchor window under the cursor
-        let pt = NSEvent.mouseLocation
-        let frame = NSRect(x: pt.x, y: pt.y, width: 1, height: 1)
-
-        if anchorWin == nil {
-            anchorWin = NSWindow(
-                contentRect: frame,
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            anchorWin?.level = .statusBar
-            anchorWin?.isOpaque = false
-            anchorWin?.backgroundColor = .clear
-            anchorWin?.ignoresMouseEvents = true
-            anchorWin?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        } else {
-            anchorWin?.setFrame(frame, display: false)
-        }
-
-        // 2) Remember the current front application and activate self
-        previousApp = NSWorkspace.shared.frontmostApplication
-        NSApp.activate(ignoringOtherApps: true)
-
-        // 3) Show the anchor
-        anchorWin?.orderFront(nil)
-
-        // 4) SwiftUI controller + exact size
-        let host = NSHostingController(rootView: TranslationBubble(text: wrappedText))
-        host.view.layoutSubtreeIfNeeded()
-        popover.contentViewController = host
-        popover.contentSize = host.view.fittingSize
-
-        // 5) Show the pop-over
-        popover.show(
-            relativeTo: anchorWin!.contentView!.bounds,
-            of:         anchorWin!.contentView!,
-            preferredEdge: .maxY
-        )
-
-        os_log("[ClipTranslator] did-show popover")
-
-        // Install Cmd+C monitor to copy whole result without mouse selection
-        installCopyKeyMonitor()
-    }
-
-    private func wrapText(_ text: String, maxLength: Int?) -> String {
-        guard let maxLength = maxLength, maxLength > 0 else {
-            return text
-        }
-
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        var resultLines: [String] = []
-
-        for line in lines {
-            if line.count <= maxLength {
-                resultLines.append(String(line))
-                continue
+        // 3. Set up event handling
+        clipboardService.doubleCopyPublisher
+            .sink { [weak self] in
+                self?.handleDoubleCopy()
             }
+            .store(in: &cancellables)
 
-            var currentLine = ""
-            let words = line.split(separator: " ")
+        // 4. Start services
+        clipboardService.startMonitoring()
+        os_log("[AppDelegate] Services are running")
+    }
 
-            for word in words {
-                if currentLine.isEmpty {
-                    currentLine = String(word)
-                } else if currentLine.count + 1 + word.count <= maxLength {
-                    currentLine += " " + String(word)
-                } else {
-                    resultLines.append(currentLine)
-                    currentLine = String(word)
+    func applicationWillTerminate(_: Notification) {
+        clipboardService.stopMonitoring()
+    }
+
+    // MARK: Event Handling
+    private func handleDoubleCopy() {
+        guard let src = NSPasteboard.general.string(forType: .string), !src.isEmpty else { return }
+        Task {
+            do {
+                let tuple = try await translationService.translate(src)
+                let prefix = "\(tuple.source) -> \(tuple.target)\n"
+                await MainActor.run {
+                    popoverService.show(text: prefix + tuple.result)
+                }
+            } catch {
+                os_log("[AppDelegate] Translation failed: %@", type: .error, String(describing: error))
+                // Optionally, show an error in the popover
+                await MainActor.run {
+                    popoverService.show(text: "Translation Error:\n\(String(describing: error))")
                 }
             }
-            resultLines.append(currentLine)
         }
-
-        return resultLines.joined(separator: "\n")
-    }
-
-    // MARK: NSPopoverDelegate
-    func popoverWillClose(_ notification: Notification) {
-        os_log("[ClipTranslator] popover will close")
-        anchorWin?.orderOut(nil)     // Hide the anchor immediately
-        restoreFocus()               // Restore focus immediately
-
-        // Remove key monitor to avoid leaking and global interception
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
-        }
-    }
-
-    func popoverDidClose(_ notification: Notification) {
-        os_log("[ClipTranslator] popover did close")
-        // Everything is already done here (left for possible debugging)
-    }
-
-    // Fast focus restoration
-    private func restoreFocus() {
-        if let app = previousApp, !app.isTerminated {
-            app.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
-        }
-        previousApp = nil
     }
 
     // MARK: Status-bar menu
@@ -193,30 +82,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
-
-    // MARK: Keyboard handling (Cmd+C)
-    /// Installs a local keyDown monitor that handles Command+C.
-    /// If there is an active text selection inside the popover (NSTextView with non-empty range),
-    /// lets the system handle copy of the selection. Otherwise copies the entire translated text.
-    private func installCopyKeyMonitor() {
-        // Remove previous monitor if any
-        if let monitor = keyMonitor { NSEvent.removeMonitor(monitor) }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else { return event }
-            // Check for Command + C
-            if event.modifierFlags.contains(.command),
-               event.charactersIgnoringModifiers?.lowercased() == "c" {
-                // 1) First try standard copy action (works when there is a selection)
-                if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) {
-                    return nil // handled by responder chain
-                }
-                // 2) No selection or no responder: copy entire text from the popover
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(self.currentPopoverText, forType: .string)
-                return nil // swallow so it doesn't beep
-            }
-            return event
-        }
-    }
 }

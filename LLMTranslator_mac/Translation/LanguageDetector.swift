@@ -1,5 +1,6 @@
 import Foundation
 import RegexBuilder
+import os.log
 
 public class LanguageDetector {
     private let config: AppConfig
@@ -13,18 +14,26 @@ public class LanguageDetector {
         guard !languages.isEmpty else { return ("en", "ru") }
 
         var langToRegex: [String: Regex<AnyRegexOutput>] = [:]
+        let defaultPattern = try! Regex(#"[\p{Script=Latin}]"#) // Known to be safe
+
         for code in languages {
-            let pattern: Regex<AnyRegexOutput>
-            if let custom = config.languageDetectionRegexes?[code], !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                pattern = try! Regex(custom)
+            var pattern: Regex<AnyRegexOutput>
+            if let customPatternString = config.languageDetectionRegexes?[code], !customPatternString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                do {
+                    pattern = try Regex(customPatternString)
+                } catch {
+                    os_log("Invalid regex for language '%@': %@. Falling back to default.", type: .error, code, String(describing: error))
+                    pattern = defaultPattern
+                }
             } else {
                 switch code {
                 case "ru":
+                    // This regex is known to be safe, so try! is acceptable here.
                     pattern = try! Regex(#"[\p{Script=Cyrillic}]"#)
                 case "en":
-                    pattern = try! Regex(#"[\p{Script=Latin}]"#)
+                    pattern = defaultPattern
                 default:
-                    pattern = try! Regex(#"[\p{Script=Latin}]"#)
+                    pattern = defaultPattern
                 }
             }
             langToRegex[code] = pattern
