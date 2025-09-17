@@ -78,15 +78,9 @@ public final class LMStudioProvider: TranslationProvider {
 
     // MARK: - Payload builder
     private func makeRequestPayload(messages: [[String: String]]) throws -> Data {
-        var dict: [String: Any] = [
-            "model":        SettingsStore.shared.config.effectiveModelName,
-            "temperature":  0.0,
-            "max_tokens":   1024,
-            "messages":     messages,
-            "stream":       false,
-            "tool_choice":  "none",
-            "enable_thinking": false
-        ]
+        var dict = SettingsStore.shared.config.requestBody.toDictionary()
+        dict["model"] = SettingsStore.shared.config.effectiveModelName
+        dict["messages"] = messages
         return try JSONSerialization.data(withJSONObject: dict, options: [])
     }
 

@@ -28,6 +28,16 @@ public struct RequestBody: Codable, Equatable {
     public var stream: Bool
     public var tool_choice: String
     public var enable_thinking: Bool
+
+    func toDictionary() -> [String: Any] {
+        return [
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": stream,
+            "tool_choice": tool_choice,
+            "enable_thinking": enable_thinking
+        ]
+    }
 }
 
 /// Minimal app configuration loaded from a single JSON file.

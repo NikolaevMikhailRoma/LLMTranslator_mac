@@ -1,6 +1,6 @@
 # LLMTranslator_mac
 
-Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU or RU↔EN translation bubble. Language choosing automaticly.
+Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU translation bubble. Language choosing automatic.
 
 - Monitors clipboard; shows SwiftUI pop‑over at cursor.
 - Calls local LLM via LM Studio (OpenAI‑style API on 127.0.0.1:1234).
@@ -22,21 +22,18 @@ Menu‑bar macOS app. Press ⌘ C C → instant EN↔RU or RU↔EN translation
 ```
 LLMTranslator_mac/
   Bubble/
-    TranslationBubble.swift                 # UI пузырь перевода
+    TranslationBubble.swift                 # UI bubble view
   Translation/
-    TranslationService.swift                # Высокоуровневый сервис: текст -> текст
-    TranslationProvider.swift               # Протокол провайдера перевода
+    TranslationService.swift                # High-level service: text → text
+    TranslationProvider.swift               # Translation provider protocol
+    LanguageDetector.swift                  # Automatic language detection
+    ClipboardService.swift                  # Clipboard monitoring
     llm/
-      qwen3-1.7b/                           # Промпты/инструкции под конкретную модель
-        messages.openais-gpt-oss-20b.json
-      OpenAI's gpt-oss 20B/                 # Промпты/инструкции под конкретную модель
-        messages.qwen3-1.7b.json
+      few_shot_examples.json                # Translation examples
   Provider/
-    LMStudioProvider.swift                  # Провайдер для LM Studio (OpenAI API совместимый)
-    # В будущем: api_offline, openrouter, openai, google, ...
-  Config.swift                               # Конфигурация приложения и SettingsStore
-  ClipTranslatorApp.swift                    # Точка входа SwiftUI
-  AppDelegate.swift                          # Логика меню-бара, буфера и popover
-  LLMTranslator-mac-Info.plist               # ATS настройки
-  LLMTranslator_mac.entitlements             # Sandbox права
+    LMStudioProvider.swift                  # LM Studio (OpenAI API compatible)
+  Config.swift                              # App configuration
+  ClipTranslatorApp.swift                   # App entry point
+  AppDelegate.swift                         # Menu-bar, clipboard and popover logic
+  settings.json                             # Runtime configuration
 ```
