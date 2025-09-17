@@ -15,5 +15,5 @@
         "tool_choice": "none",
         "enable_thinking": false
     },
-    "maxLineLength": 80
+    "maxLineLength": 160
 }

@@ -43,7 +43,7 @@ public struct AppConfig: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case baseURL, apiKey, modelIdentifier, languageCodes, languageDetectionRegexes, doubleCopyGapSeconds, requestBody
-        case maxLineLength = "max_line_length"
+        case maxLineLength
     }
 }
 
