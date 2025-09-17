@@ -59,6 +59,8 @@ public struct AppConfig: Codable, Equatable {
     public var doubleCopyGapSeconds: Double
     /// Request body parameters.
     public var requestBody: RequestBody
+    /// Maximum line length for the translated text.
+    public var maxLineLength: Int?
 
     /// Full Chat Completions URL depending on the selected mode.
     public var effectiveChatCompletionsURL: URL? {

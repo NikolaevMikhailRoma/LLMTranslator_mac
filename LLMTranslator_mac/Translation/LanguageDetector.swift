@@ -1,7 +1,7 @@
 import Foundation
 import RegexBuilder
 
-class LanguageDetector {
+public class LanguageDetector {
     private let config: AppConfig
 
     init(config: AppConfig) {
